@@ -13,9 +13,6 @@ module.exports = (sequelize) => {
       primaryKey: true,
       autoIncrement: true,
     },
-    userId: {
-
-    },
     title: {
       type: Sequelize.STRING,
       allowNull: false,
@@ -54,9 +51,7 @@ module.exports = (sequelize) => {
   Course.associate = (models) => {
     // Associations
     Course.belongsTo(models.User, { 
-      foreignKey: {
-        fieldName: 'userId'
-      },
+      foreignKey: 'userId',
     });
   };
 

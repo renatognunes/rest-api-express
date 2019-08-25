@@ -1,3 +1,5 @@
+const fs = require('fs');
+const path = require('path');
 const Sequelize = require('sequelize');
 
 /**
@@ -13,16 +15,6 @@ const sequelize = new Sequelize({
   logging: false,
 });
 
-/**
- * Include Book module to the database
- * @const db
- */
-const db = {
-  sequelize,
-  Sequelize,
-  models: {},
-};
-
 console.log('Testing the connection to the database...');
 (async () => {
   try {
@@ -35,7 +27,27 @@ console.log('Testing the connection to the database...');
   }
 })();
 
-// db.models.Book = require('./models/book.js')(sequelize);
+const models = {};
 
-// Exports db module
-module.exports = db;
+// Import all of the models.
+fs
+  .readdirSync(path.join(__dirname, 'models'))
+  .forEach((file) => {
+    console.info(`Importing database model from file: ${file}`);
+    const model = sequelize.import(path.join(__dirname, 'models', file));
+    models[model.name] = model;
+  });
+
+// If available, call method to create associations.
+Object.keys(models).forEach((modelName) => {
+  if (models[modelName].associate) {
+    console.info(`Configuring the associations for the ${modelName} model...`);
+    models[modelName].associate(models);
+  }
+});
+
+module.exports = {
+  sequelize,
+  Sequelize,
+  models,
+};
