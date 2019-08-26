@@ -1,10 +1,7 @@
-/**
- * Import database User model
- * @const User
- */
 const db = require("../db");
 const { User, Course } = db.models;
 const { check, validationResult } = require("express-validator");
+const authenticateUser = require("../authenticateUser");
 
 /**
  * Express Web Framework module
@@ -19,24 +16,66 @@ const express = require("express");
 const router = express.Router();
 
 // Router for all Courses
-router.get("/courses", async (req, res, next) => {
-  await Course.findAll({
+router.get("/courses", authenticateUser, async (req, res, next) => {
+  const courses = await Course.findAll({
+    attributes: [
+      "id",
+      "title",
+      "description",
+      "estimatedTime",
+      "materialsNeeded",
+      "userId"
+    ],
     include: [
       {
-        model: User
+        model: User,
+        attributes: ["id", "firstName", "lastName", "emailAddress"]
       }
     ]
-  })
-    .then(courses => {
-      // Returns a list of courses (including the user that owns each course)
-      res.status(200).json({ courses });
-    })
-    .catch(next);
+  });
+  if (courses) {
+    res.status(200).json({ courses });
+  } else {
+    const err = new Error("Internal Server Error");
+    err.message = "Ops! Sorry, There is a problem in the server!";
+    err.error = "Internal Server Error";
+    next(err);
+  }
+});
+
+// Router for specific course
+router.get("/courses/:id", authenticateUser, async (req, res, next) => {
+  const course = await Course.findOne({
+    where: { id: req.params.id },
+    attributes: [
+      "id",
+      "title",
+      "description",
+      "estimatedTime",
+      "materialsNeeded",
+      "userId"
+    ],
+    include: [
+      {
+        model: User,
+        attributes: ["id", "firstName", "lastName", "emailAddress"]
+      }
+    ]
+  });
+  if (course) {
+    res.status(200).json({ course });
+  } else {
+    const err = new Error("Internal Server Error");
+    err.message = "Ops! Sorry, There is a problem in the server!";
+    err.error = "Internal Server Error";
+    next(err);
+  }
 });
 
 // Router for creating new Course
 router.post(
   "/courses",
+  authenticateUser,
   [
     check("title")
       .exists({ checkNull: true, checkFalsy: true })
@@ -45,7 +84,7 @@ router.post(
       .exists({ checkNull: true, checkFalsy: true })
       .withMessage('Please provide a value for "description"')
   ],
-  (req, res, next) => {
+  async (req, res, next) => {
     // Attempt to get the validation result from the Request object.
     const errors = validationResult(req);
 
@@ -56,40 +95,41 @@ router.post(
 
       // Return the validation errors to the client.
       errors.status = 400;
+      errors.error = "Bad Request";
       errors.message = errorMessages;
       next(errors);
     } else {
-      // Get the course from the request body.
-      const course = req.body;
-      console.log(course);
+      try {
+        const course = await Course.create({
+          title: req.body.title,
+          description: req.body.description,
+          estimatedTime: req.body.estimatedTime,
+          materialsNeeded: req.body.materialsNeeded,
+          userId: req.currentUser.id
+        });
 
-      // Creates a course, sets the Location header to the URI for the course, and returns no content
-      res.status(201).json({ return: "No Content" });
+        // Creates a course, sets the Location header to the URI for the course, and returns no content
+        res
+          .status(201)
+          .location(`/api/courses/${course.id}`)
+          .end();
+      } catch (error) {
+        if (error.name === "SequelizeValidationError") {
+          const errorMsg = error.errors.map(err => err.message);
+          console.error("Validation errors: ", errorMsg);
+          error.message = errorMsg;
+
+          next(error);
+        }
+      }
     }
   }
 );
 
-// Router for specific course
-router.get("/courses/:id", async (req, res, next) => {
-  await Course.findAll({
-    where: { id: req.params.id },
-    include: [
-      {
-        model: User
-      }
-    ]
-  })
-    .then(course => {
-      console.log(course);
-      // Returns a course (including the user that owns the course) for the provided course ID
-      res.status(200).json({ course });
-    })
-    .catch(next);
-});
-
 // Router for update a course
 router.put(
   "/courses/:id",
+  authenticateUser,
   [
     check("title")
       .exists({ checkNull: true, checkFalsy: true })
@@ -98,7 +138,7 @@ router.put(
       .exists({ checkNull: true, checkFalsy: true })
       .withMessage('Please provide a value for "description"')
   ],
-  (req, res, next) => {
+  async (req, res, next) => {
     // Attempt to get the validation result from the Request object.
     const errors = validationResult(req);
 
@@ -109,23 +149,72 @@ router.put(
 
       // Return the validation errors to the client.
       errors.status = 400;
+      errors.error = "Bad Request";
       errors.message = errorMessages;
       next(errors);
     } else {
-      // Get the course from the request body.
-      const course = req.body;
-      console.log(course);
+      const course = await Course.findByPk(req.params.id);
+      if (course) {
+        if (course.userId === req.currentUser.id) {
+          try {
+            await course.update({
+              title: req.body.title,
+              description: req.body.description,
+              estimatedTime: req.body.estimatedTime,
+              materialsNeeded: req.body.materialsNeeded,
+              userId: req.currentUser.id
+            });
+            // Updates a course and returns no content
+            res.status(204).end();
+          } catch (error) {
+            if (error.name === "SequelizeValidationError") {
+              const errorMsg = error.errors.map(err => err.message);
+              console.error("Validation errors: ", errorMsg);
+              error.message = errorMsg;
 
-      // Updates a course and returns no content
-      res.status(204).json({ return: "No Content" });
+              next(error);
+            }
+          }
+        } else {
+          res.status(403).end();
+        }
+      } else {
+        const err = new Error("Internal Server Error");
+        err.message = "Ops! Sorry, There is a problem in the server!";
+        err.error = "Internal Server Error";
+        next(err);
+      }
     }
   }
 );
 
 // Router for delete a course
-router.delete("/courses/:id", (req, res, next) => {
-  // Deletes a course and returns no content
-  res.status(204).json({ return: "No Content" });
+router.delete("/courses/:id", authenticateUser, async (req, res, next) => {
+  const course = await Course.findByPk(req.params.id);
+  if (course) {
+    if (course.userId === req.currentUser.id) {
+      try {
+        await course.destroy();
+        // Deletes a course and returns no content
+        res.status(204).end();
+      } catch (error) {
+        if (error.name === "SequelizeValidationError") {
+          const errorMsg = error.errors.map(err => err.message);
+          console.error("Validation errors: ", errorMsg);
+          error.message = errorMsg;
+
+          next(error);
+        }
+      }
+    } else {
+      res.status(403).end();
+    }
+  } else {
+    const err = new Error("Internal Server Error");
+    err.message = "Ops! Sorry, There is a problem in the server!";
+    err.error = "Internal Server Error";
+    next(err);
+  }
 });
 
 // Export "/courses" router

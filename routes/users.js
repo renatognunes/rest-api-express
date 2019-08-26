@@ -6,6 +6,7 @@ const db = require("../db");
 const { User } = db.models;
 const { check, validationResult } = require("express-validator");
 const bcryptjs = require("bcryptjs");
+const authenticateUser = require("../authenticateUser");
 
 /**
  * Express Web Framework module
@@ -19,13 +20,14 @@ const express = require("express");
  */
 const router = express.Router();
 
-// Route for current User
-router.get("/users", (req, res) => {
-  // Returns the currently authenticated user
-  res.status(200).json({ user: "currentUser" });
-});
 
 // Route for current User
+router.get("/users", authenticateUser, (req, res) => {
+  // Returns the currently authenticated user
+  res.status(200).json({ currentUser: req.currentUser });
+});
+
+// Route for creating new user
 router.post(
   "/users",
   [
@@ -37,7 +39,19 @@ router.post(
       .withMessage('Please provide a value for "lastName"'),
     check("emailAddress")
       .exists({ checkNull: true, checkFalsy: true })
-      .withMessage('Please provide a value for "emailAddress"'),
+      .withMessage('Please provide a value for "emailAddress"')
+      .isEmail()
+      .withMessage('Please provide a valid value for "emailAddress"')
+      .custom( async value => {
+        const user = await User.findOne({
+          where: { emailAddress: value },
+        });
+        if (user) {
+          throw new Error('E-mail already in use');
+        } else {
+          return true;
+        }
+      }),
     check("password")
       .exists({ checkNull: true, checkFalsy: true })
       .withMessage('Please provide a value for "password"')
@@ -53,6 +67,7 @@ router.post(
 
       // Return the validation errors to the client.
       errors.status = 400;
+      errors.error = "Bad Request";
       errors.message = errorMessages;
       next(errors);
     } else {
@@ -82,7 +97,6 @@ router.post(
           next(error);
         }
       }
-      console.log(user);
     }
   }
 );
