@@ -1,7 +1,7 @@
 const db = require("../db");
 const { User, Course } = db.models;
 const { check, validationResult } = require("express-validator");
-const authenticateUser = require("../authenticateUser");
+const authenticateUser = require("../auth");
 
 /**
  * Express Web Framework module
@@ -15,8 +15,16 @@ const express = require("express");
  */
 const router = express.Router();
 
-// Router for all Courses
-router.get("/courses", authenticateUser, async (req, res, next) => {
+
+/**
+ * Router for retrieving all courses from the database
+ * @method GET
+ * @param {express.resquest}
+ * @param {express.response}
+ * @param {express.next}
+ * @returns {Promise} If resolve it will respond with all courses in JSON format. If it throws, pass the error to the global error middleware.
+ */
+router.get("/courses", async (req, res, next) => {
   const courses = await Course.findAll({
     attributes: [
       "id",
@@ -36,15 +44,21 @@ router.get("/courses", authenticateUser, async (req, res, next) => {
   if (courses) {
     res.status(200).json({ courses });
   } else {
-    const err = new Error("Internal Server Error");
-    err.message = "Ops! Sorry, There is a problem in the server!";
-    err.error = "Internal Server Error";
-    next(err);
+    const error = new Error("Ops! Sorry, There is a problem in the server!");
+    next(error);
   }
 });
 
-// Router for specific course
-router.get("/courses/:id", authenticateUser, async (req, res, next) => {
+
+/**
+ * Router for retrieving a single course from the database
+ * @method GET
+ * @param {express.resquest}
+ * @param {express.response}
+ * @param {express.next}
+ * @returns {Promise} If resolve it will respond with the course corresponded to the route parameter value in JSON format. If it throws, pass the error to the global error middleware.
+ */
+router.get("/courses/:id", async (req, res, next) => {
   const course = await Course.findOne({
     where: { id: req.params.id },
     attributes: [
@@ -65,14 +79,21 @@ router.get("/courses/:id", authenticateUser, async (req, res, next) => {
   if (course) {
     res.status(200).json({ course });
   } else {
-    const err = new Error("Internal Server Error");
-    err.message = "Ops! Sorry, There is a problem in the server!";
-    err.error = "Internal Server Error";
-    next(err);
+    const error = new Error("Ops! Sorry, There is a problem in the server!");
+    next(error);
   }
 });
 
-// Router for creating new Course
+
+/**
+ * Router for creating a new Course
+ * @method POST
+ * @function authenticateUser - Get the user credentials 
+ * @param {express.resquest}
+ * @param {express.response}
+ * @param {express.next}
+ * @returns {Promise} If resolve it will create a new course and store it in the database. If it throws, find validation errors and print messages.
+ */
 router.post(
   "/courses",
   authenticateUser,
@@ -90,7 +111,7 @@ router.post(
 
     // If there are validation errors...
     if (!errors.isEmpty()) {
-      // Use the Array `map()` method to get a list of error messages.
+      // Get a list of error messages.
       const errorMessages = errors.array().map(error => error.msg);
 
       // Return the validation errors to the client.
@@ -107,26 +128,24 @@ router.post(
           materialsNeeded: req.body.materialsNeeded,
           userId: req.currentUser.id
         });
-
-        // Creates a course, sets the Location header to the URI for the course, and returns no content
-        res
-          .status(201)
-          .location(`/api/courses/${course.id}`)
-          .end();
+        res.status(201).location(`/api/courses/${course.id}`).end();
       } catch (error) {
-        if (error.name === "SequelizeValidationError") {
-          const errorMsg = error.errors.map(err => err.message);
-          console.error("Validation errors: ", errorMsg);
-          error.message = errorMsg;
-
-          next(error);
-        }
+        next(error);
       }
     }
   }
 );
 
-// Router for update a course
+
+/**
+ * Router for updating a course
+ * @method PUT
+ * @function authenticateUser - Get the user credentials 
+ * @param {express.resquest}
+ * @param {express.response}
+ * @param {express.next}
+ * @returns {Promise} If resolve it will update the course corresponded to the route parameter value. If it throws, find validation errors and print messages.
+ */
 router.put(
   "/courses/:id",
   authenticateUser,
@@ -155,6 +174,7 @@ router.put(
     } else {
       const course = await Course.findByPk(req.params.id);
       if (course) {
+        // Check if currentUser owns the course
         if (course.userId === req.currentUser.id) {
           try {
             await course.update({
@@ -164,58 +184,50 @@ router.put(
               materialsNeeded: req.body.materialsNeeded,
               userId: req.currentUser.id
             });
-            // Updates a course and returns no content
             res.status(204).end();
           } catch (error) {
-            if (error.name === "SequelizeValidationError") {
-              const errorMsg = error.errors.map(err => err.message);
-              console.error("Validation errors: ", errorMsg);
-              error.message = errorMsg;
-
-              next(error);
-            }
+            next(error);
           }
         } else {
           res.status(403).end();
         }
       } else {
-        const err = new Error("Internal Server Error");
-        err.message = "Ops! Sorry, There is a problem in the server!";
-        err.error = "Internal Server Error";
-        next(err);
+        const error = new Error("Ops! Sorry, There is a problem in the server!");
+        next(error);
       }
     }
   }
 );
 
-// Router for delete a course
+
+/**
+ * Router for deleting a course
+ * @method DELETE
+ * @function authenticateUser - Get the user credentials 
+ * @param {express.resquest}
+ * @param {express.response}
+ * @param {express.next}
+ * @returns {Promise} If resolve it will delete the course corresponded to the route parameter value. If it throws, pass the error to the global error middleware.
+ */
 router.delete("/courses/:id", authenticateUser, async (req, res, next) => {
   const course = await Course.findByPk(req.params.id);
   if (course) {
+    // Check if currentUser owns the course
     if (course.userId === req.currentUser.id) {
       try {
         await course.destroy();
-        // Deletes a course and returns no content
         res.status(204).end();
       } catch (error) {
-        if (error.name === "SequelizeValidationError") {
-          const errorMsg = error.errors.map(err => err.message);
-          console.error("Validation errors: ", errorMsg);
-          error.message = errorMsg;
-
-          next(error);
-        }
+        next(error);
       }
     } else {
       res.status(403).end();
     }
   } else {
-    const err = new Error("Internal Server Error");
-    err.message = "Ops! Sorry, There is a problem in the server!";
-    err.error = "Internal Server Error";
-    next(err);
+    const error = new Error("Ops! Sorry, There is a problem in the server!");
+    next(error);
   }
 });
 
-// Export "/courses" router
+
 module.exports = router;

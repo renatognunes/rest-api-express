@@ -1,8 +1,8 @@
 const Sequelize = require('sequelize');
 
 /**
- * Module User initialize the Users table model
- * @namespace User
+ * Module Course initialize the Courses table model
+ * @namespace Course
  * @extends Sequelize.Model
  */
 module.exports = (sequelize) => {

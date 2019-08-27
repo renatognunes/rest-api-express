@@ -3,6 +3,14 @@ const { User } = db.models;
 const bcryptjs = require("bcryptjs");
 const auth = require("basic-auth");
 
+
+/**
+ * Middleware for authenticating users
+ * @param {express.resquest}
+ * @param {express.response}
+ * @param {express.next}
+ * @returns {Promise} If resolve it will set the user on the request and call next(). If it throws, it will either warn a credential error or deny access.
+ */
 const authenticateUser = async (req, res, next) => {
   let message = null;
 
@@ -11,16 +19,10 @@ const authenticateUser = async (req, res, next) => {
 
   // If the user's credentials are available...
   if (credentials) {
-    // Attempt to retrieve the user from the database
-    // by their username (i.e. the user's "key"
-    // from the Authorization header).
     const user = await User.findOne( { where: { emailAddress: credentials.name } } );
 
     // If a user was successfully retrieved from the database...
     if (user) {
-      // Use the bcryptjs npm package to compare the user's password
-      // (from the Authorization header) to the user's password
-      // that was retrieved from the data store.
       const authenticated = bcryptjs.compareSync(
         credentials.pass,
         user.password
@@ -28,9 +30,7 @@ const authenticateUser = async (req, res, next) => {
 
       // If the passwords match...
       if (authenticated) {
-        // Then store the retrieved user object on the request object
-        // so any middleware functions that follow this middleware function
-        // will have access to the user's information.
+
         req.currentUser = user;
       } else {
         message = `Authentication failure for username: ${user.username}`;
@@ -49,7 +49,6 @@ const authenticateUser = async (req, res, next) => {
     // Return a response with a 401 Unauthorized HTTP status code.
     res.status(401).json({ message: "Access Denied" });
   } else {
-    // Or if user authentication succeeded...
     // Call the next() method.
     next();
   }

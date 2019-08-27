@@ -1,12 +1,8 @@
-/**
- * Import database User model
- * @const User
- */
 const db = require("../db");
 const { User } = db.models;
 const { check, validationResult } = require("express-validator");
 const bcryptjs = require("bcryptjs");
-const authenticateUser = require("../authenticateUser");
+const authenticateUser = require("../auth");
 
 /**
  * Express Web Framework module
@@ -21,13 +17,27 @@ const express = require("express");
 const router = express.Router();
 
 
-// Route for current User
+/**
+ * Router for retrieving current user
+ * @method GET
+ * @function authenticateUser - Get the user credentials 
+ * @param {express.resquest}
+ * @param {express.response}
+ * @returns {Promise} from authenticateUser function. If resolve it will respond with the current user information in JSON format.
+ */
 router.get("/users", authenticateUser, (req, res) => {
-  // Returns the currently authenticated user
   res.status(200).json({ currentUser: req.currentUser });
 });
 
-// Route for creating new user
+
+/**
+ * Router for creating a new user
+ * @method POST
+ * @param {express.resquest}
+ * @param {express.response}
+ * @param {express.next}
+ * @returns {Promise} If resolve it will create a new user and store it in the database. If it throws, find validation errors and print messages.
+ */
 router.post(
   "/users",
   [
@@ -43,13 +53,15 @@ router.post(
       .isEmail()
       .withMessage('Please provide a valid value for "emailAddress"')
       .custom( async value => {
-        const user = await User.findOne({
-          where: { emailAddress: value },
-        });
-        if (user) {
-          throw new Error('E-mail already in use');
-        } else {
-          return true;
+        if(value) {
+          const user = await User.findOne({
+            where: { emailAddress: value }
+          });
+          if (user) {
+            throw new Error('E-mail already in use');
+          } else {
+            return true;
+          }
         }
       }),
     check("password")
@@ -62,7 +74,7 @@ router.post(
 
     // If there are validation errors...
     if (!errors.isEmpty()) {
-      // Use the Array `map()` method to get a list of error messages.
+      // Get a list of error messages.
       const errorMessages = errors.array().map(error => error.msg);
 
       // Return the validation errors to the client.
@@ -76,7 +88,6 @@ router.post(
 
       // Hash the new user's password.
       user.password = bcryptjs.hashSync(user.password);
-
       try {
         await User.create({
           firstName: user.firstName,
@@ -85,21 +96,13 @@ router.post(
           password: user.password
         });
 
-        // Creates a user, sets the Location header to "/", and returns no content
         res.status(201).location('/').end();
-
       } catch (error) {
-        if (error.name === "SequelizeValidationError") {
-          const errorMsg = error.errors.map(err => err.message);
-          console.error("Validation errors: ", errorMsg);
-          error.message = errorMsg;
-
           next(error);
-        }
       }
     }
   }
 );
 
-// Export "/books" router
+
 module.exports = router;
