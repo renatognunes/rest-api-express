@@ -25,8 +25,22 @@ const router = express.Router();
  * @param {express.response}
  * @returns {Promise} from authenticateUser function. If resolve it will respond with the current user information in JSON format.
  */
-router.get("/users", authenticateUser, (req, res) => {
-  res.status(200).json({ currentUser: req.currentUser });
+router.get("/users", authenticateUser, async (req, res) => {
+  const user = await User.findOne({
+    where: { id: req.currentUser.id },
+    attributes: [
+      "id",
+      "firstName",
+      "lastName",
+      "emailAddress",
+    ]
+  });
+  if (user) {
+    res.status(200).json({ user });
+  } else {
+    const error = new Error("Ops! Sorry, There is a problem in the server!");
+    next(error);
+  }
 });
 
 
